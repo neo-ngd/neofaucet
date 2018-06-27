@@ -21,8 +21,12 @@ from neo.Implementations.Wallets.peewee.UserWallet import UserWallet
 from neo.Implementations.Blockchains.LevelDB.LevelDBBlockchain import LevelDBBlockchain
 from neo.Settings import settings
 
+
 targetkey = '033ec803d110ad793aab8171847afbceef842f54ac0290bd4af074590ade29c08e'
 
+def start_wallet_loop(wallet):
+    _walletdb_loop = task.LoopingCall(wallet.ProcessBlocks())
+    _walletdb_loop.start(.1)
 
 def make_multisig(target_pubkey, wallet):
     wallets = []
@@ -46,11 +50,20 @@ def make_multisig(target_pubkey, wallet):
 
 
 def custom_background_code():
+
     wallet = UserWallet.Open(path, to_aes_key(password))
+    # wallet.Rebuild()
+    # start_wallet_loop(wallet)
+    # print("Opened wallet at %s" % path)
+
+    print(wallet.ToJson()['percent_synced'])
     multisig_addr = make_multisig(targetkey, wallet)
     args = ['GAS','AK5q8peiC4QKwuZHWX5Dkqhmar1TAGvZBS','1']#testing
-
+    while wallet._current_height != Blockchain.Default().Height:
+        print("Wallet %s / Blockchain %s" % (str(wallet._current_height), str(Blockchain.Default().Height)))
+        sleep(15)
     construct_and_send('', wallet, args)
+    print("sent")
 
 
 def start_neo():
@@ -63,6 +76,12 @@ def start_neo():
     dbloop = task.LoopingCall(Blockchain.Default().PersistBlocks)
     dbloop.start(.1)
     NodeLeader.Instance().Start()
+
+    wallet = UserWallet.Open(path, to_aes_key(password))
+    # wallet.Rebuild()
+    _walletdb_loop = task.LoopingCall(wallet.ProcessBlocks())
+    _walletdb_loop.start(.1)
+    print("Opened wallet at %s" % path)
 
     # Start a thread with custom code
     d = threading.Thread(target=custom_background_code)
